@@ -10,10 +10,10 @@ Main:
 		Else
 			Send word to word checker
 
-	Word checker recieves input, failure on any test results in a false from the function
+	Word checker receives input, failure on any test results in a false from the function
 		Check for valid length
 		Check to see if all letters in input are in puzzle and that center letter is in input
 		Check to see if word is in dictionary
 		True or false from word checker results in a message being displayed and return to displaying the puzzle again
 
-	Command Function recieves command, checks for valid (quit is the only valid in core) command and if so, does the command
+	Command Function receives command, checks for valid (quit is the only valid in core) command and if so, does the command

@@ -1,6 +1,47 @@
 .eqv WORDS_IN_REGULAR_DICT 75558
 .eqv WORDS_IN_NINECHAR_DICT 16692
 .eqv LOADING_BAR_UPDATE_FREQ 1500 #1 period printed per X words processed at the "Loading" screen
+.eqv COMMAND_SIGIL 33 #ASCII 33 is "!"
+
+.macro push (%reg)
+subi $sp, $sp, 4
+sw %reg, ($sp)
+.end_macro
+
+.macro pop (%reg)
+lw %reg, ($sp)
+addi $sp, $sp, 4
+.end_macro
+
+################################################
+# PLEASE DO NOT USE THESE EXCEPT FOR DEBUGGING #
+# THEY WILL BE DELETED EVENTUALLY	       #
+################################################
+.macro print_string (%reg)
+push ($a0)
+push ($v0)
+li $v0, 4
+move $a0, %reg
+syscall
+li $v0, 11
+li $a0, 10
+syscall
+pop ($v0)
+pop ($a0)
+.end_macro
+
+.macro print_int (%reg)
+push ($a0)
+push ($v0)
+li $v0, 1
+move $a0, %reg
+syscall
+li $v0, 11
+li $a0, 10
+syscall
+pop ($v0)
+pop ($a0)
+.end_macro
 
 .data
 
@@ -10,9 +51,19 @@ startingWordsDictionaryFileName: .asciiz "ninechar.txt"
 pointerTable: .space 4096
 .align 2
 nineCharArray: .space 8
-strbuf: .space 11 #Used during testreadloop -- not permanent!
-loadMsg: .asciiz "Loading"
+userInputBuffer: .space 10
+.align 2
+bitArray: .space 9
 
+
+loadMsg: .asciiz "Loading"
+boxTopBar: .asciiz " /-------------\\\n"
+boxBottomBar: .asciiz " \\-------------/\n\n"
+boxLeftBar: .asciiz " |  "
+boxSeperator: .asciiz "   "
+boxRightBar: .asciiz "  |\n"
+.align 2
+pointerToTestPuzzle: .space 5
 .text
 
 # Set up the hash table and the array of
@@ -32,6 +83,8 @@ li $a0, WORDS_IN_NINECHAR_DICT
 sll $a0, $a0, 2		#4 bytes per pointer * the number of 9-character words (16692)
 li $v0, 9
 syscall
+move $t0, $v0		#Since we'll be incrementing $v0 as we add words, we need to save a pointer
+			#to the beginning of the array.
 nineCharStringReadLoop:
 lw $a0, ($sp) 		#$a0: pointer to a string being processed.
 addiu $sp, $sp, 4 	#Stack pointer must be manually manipulated... 
@@ -42,14 +95,163 @@ addiu $v0, $v0, 4	#Increment the current position of the array.
 b nineCharStringReadLoop
 NCSRLDone:
 la $v1, nineCharArray
-sw $v0, ($v1)
+sw $t0, ($v1)
 ####################################################
 # The hashtable and array are loaded: the game can start.
 
-testreadloop: #Temporary loop for testing the hashtable
+newRound:
+jal GenPuzzle
+move $s0, $v0
+
+gameInputLoop:
+jal PrintPuzzle	#Print the current puzzle...
 li $v0, 8
 li $a1, 10
-la $a0, strbuf
+la $a0, userInputBuffer
+syscall		#Then, poll user for input.
+lb $t0, ($a0)	#Check the first letter of the user's input.
+beq $t0, COMMAND_SIGIL, handleCommand	#If it is the command sigil, process the input as a command.
+jal CheckWord	#Otherwise, it is a word.
+move $a0, $v0
+li $v0, 1
+syscall
+li $a0, 10
+li $v0, 11
+syscall
+b gameInputLoop
+
+
+####################################################
+# CheckWord: given user's input, check whether:
+#	1. All of the characters are in the puzzle, with no duplicates allowed
+#	2. The middle character in the puzzle was used
+#	3. The input is a valid word
+# Arguments:
+#	$a0: user input
+#	$s0: puzzle
+# Uses registers:
+#	nearly all of them
+# Returns:
+#	$v0 is a status code:
+#		0: word satisfied all conditions
+#		1: word was not in hashtable
+#		2: word did not have the middle letter
+#		3: word had characters other than those in the puzzle
+####################################################
+CheckWord:
+sw $zero, bitArray	#bitArray has to be cleaned up from the last time it was called.
+sw $zero, bitArray+4	#...
+sb $zero, bitArray+8	#...done. (4+4+1 = 9 bytes of space)
+li $t4, 1		#$t4 holds the value 1, solely for the purpose of storing it in bitArray[n].
+move $t5, $a0		#preserve $a0 in $t5; $a0 is manipulated in CWCheckLettersLoop
+lw $a1, ($s0)		#$a1: pointer to the puzzle string! (don't forget: $s0 is a pointer to a pointer!)
+
+#This loop iterates over the characters in the user's input until it reaches
+#a newline or null. (Only strings of nine characters have no newline character.)
+#An interior loop, CWFindLetterInPuzzle, iterates FORWARD through the puzzle string
+#while counting BACKWARD from 8 to 0; if the character from the input matches a character
+#in the puzzle string, a 1 is written to bitArray[counter]. Note, therefore, that
+#the order of bitArray is the opposite of the puzzle string; note, too, that this does not matter,
+#because only the middle element is of interest after this loop and this would be bitArray[4] in either case.
+
+CWCheckLettersLoop:
+lb $t0, ($a0)
+beqz $t0, CWLoopSuccess #null byte signals the end of a string
+beq $t0, 10, CWLoopSuccess #so does a newline
+li $t1, 9
+lw $a1, ($s0)
+
+CWFindLetterInPuzzle:
+subi $t1, $t1, 1	#Loop runs from 8 down to 0.
+bltz $t1, CWFailLetterNotInPuzzle
+lb $t2, ($a1)
+addiu $a1, $a1, 1
+beq $t0, $t2, CWFLIPDone
+b CWFindLetterInPuzzle
+CWFLIPDone:
+
+lb $t3, bitArray($t1)
+bnez $t3, CWFindLetterInPuzzle
+sb $t4, bitArray($t1)
+addiu $a0, $a0, 1
+b CWCheckLettersLoop
+
+CWLoopSuccess:
+
+lb $t1, bitArray+4
+ble $t1, $zero, CWFailNoMidLetter
+
+#We are finally ready for the last test: putting the word through the hash table.
+#Before we can do this, however, we must pad the word with `s until it is nine
+#characters long, unless, of course, it is already nine characters long.
+#The good news is that CWCheckLettersLoop has done a lot of heavy lifting for us:
+#	$t0 is a newline (if word is less than 9 chars), zero otherwise;
+#	$a0 points to that newline or null character;
+#	and $t5 points to the beginning of the user input.
+#Therefore, the length of the input is simply $a0 - $t5!
+
+li $t4, '`'
+beqz $t0, CWFormatInputDone
+sub $t0, $a0, $t5
+li $t1, 9
+sub $t0, $t1, $t0 #now $t0 is the number of `s we need
+CWFIInsertPadding:
+sb $t4, ($a0)
+addi $a0, $a0, 1
+subi $t0, $t0, 1
+beqz $t0, CWFormatInputDone
+b CWFIInsertPadding
+
+CWFormatInputDone:
+
+move $a0, $t5
+push ($ra)
+jal CheckInHashTable
+pop ($ra)
+jr $ra
+
+CWFailNotWord:
+	#CheckInHashTable returns 1 in $v0 if input is not in the table.
+
+CWFailNoMidLetter:
+li $v0, 2
+jr $ra
+
+CWFailLetterNotInPuzzle:
+li $v0, 3
+jr $ra
+
+####################################################
+# handleCommand: handles the command in $a0.
+# Supported commands:
+#	none yet
+# Note: this is not a function. Don't use "jal handleCommand",
+# use "b handleCommand" instead.
+####################################################
+handleCommand:
+b quitProgram
+
+######################################################
+
+teststringgen:	#Temporary loop for testing the puzzle generator.
+li $t0, 5	#Generates this many random scrambled 9-char words, prints them, quits.
+tsgloop:
+beqz $t0, quitProgram
+jal GenPuzzle
+lw $a0, ($v0)
+li $v0, 4
+syscall
+li $a0, 10
+li $v0, 11
+syscall
+subi $t0, $t0, 1
+b tsgloop
+b quitProgram
+
+testreadloop:	#Temporary loop for testing the hashtable
+li $v0, 8
+li $a1, 10
+la $a0, userInputBuffer
 syscall
 jal CheckInHashTable
 move $a0, $v0
@@ -59,9 +261,120 @@ li $a0, 10
 li $v0, 11
 syscall
 b testreadloop
-
-
 b quitProgram
+
+
+####################################################
+# PrintPuzzle: prints a textual representation of
+# the current puzzle. For example, if the puzzle
+# is "123456789", 
+# /-------------\
+# |  1   2   3  |
+# |  4   5   6  |
+# |  7   8   9  |
+# \-------------/
+# will be printed to the console.
+# The appearance of the box can be changed without too much, if any, changes
+# made to this function, since the parts of the box are stored in strings like
+# boxTopBar, boxSeperator, etc. What this function actually prints to the screen is:
+# [TB]
+# [LB]1[S]2[S]3[RB] (3 times)
+# [BB]
+# Note: this function does not print newlines. They must be included in [TB], [RB], etc.
+# Arguments:
+#	$s0: pointer to the puzzle (a nine-char string)
+# Uses registers:
+#	$a0-1, $v0, $t0
+# Returns:
+#	nothing
+####################################################
+PrintPuzzle:
+push ($ra)
+lw $a1, ($s0)
+la $a0, boxTopBar
+li $v0, 4
+syscall
+li $t0, 3
+PPBoxLoop:
+subiu $t0, $t0, 1
+la $a0, boxLeftBar
+syscall
+jal PPNextChar
+la $a0, boxSeperator
+li $v0, 4
+syscall
+jal PPNextChar
+la $a0, boxSeperator
+li $v0, 4
+syscall
+jal PPNextChar
+la $a0, boxRightBar
+li $v0, 4
+syscall
+bnez $t0, PPBoxLoop
+la $a0, boxBottomBar
+li $v0, 4
+syscall
+pop ($ra)
+jr $ra
+PPNextChar:
+lb $a0, ($a1)
+li $v0, 11
+addiu $a1, $a1, 1
+syscall
+jr $ra
+
+
+####################################################
+# GenPuzzle: picks a random entry in the array of nine-character words;
+# then, scrambles the string, and returns a pointer to it.
+# Arguments:
+#	none
+# Uses registers:
+#	$a0, $a1, $v0
+# Returns:
+#	$v0: a pointer to the string
+####################################################
+GenPuzzle:
+push ($t0)
+li $v0, 30	#syscall 30 gets system time as a 64-bit int.
+syscall 	#It is placed in $a0 and $a1;
+li $v0, 42 	#42 gets a random number in a range,
+move $a0, $a1
+li $a1, WORDS_IN_NINECHAR_DICT #where $a1 is the upper bound (lower bd. is 0)
+subiu $a1, $a1, 1
+syscall 		#and $a0 is a random seed!
+sll $a0, $a0, 2
+la $v1, nineCharArray
+lw $v1, ($v1)
+addu $a0, $a0, $v1	#a0 points to the random string.
+#Now, we will scramble the string.
+#NOTE: the string is NOT copied before it is scrambled.
+#The original is being scrambled, and this is OK iff (since)
+#nothing special happens when the user finds the puzzle's seed.
+move $t1, $a0
+lw $v1, ($a0)		#$v1 points to the first character of the string
+li $t0, 8
+addu $v1, $v1, $t0	#now it points to the last character of the string
+GPShuffleLoop:
+beqz $t0, GPEnd
+li $v0, 42 		#Generate random int...
+move $a1, $t0		#between 0 and the loop counter.
+move $a0, $t1
+syscall			#Note: the pointer to the string is used as a random seed
+addiu $a0, $a0, 1
+subu $v0, $v1, $a0	#$v0 points to a random character in the string
+lb $t2, ($v1)
+lb $t3, ($v0)
+sb $t3, ($v1)
+sb $t2, ($v0)
+subiu $t0, $t0, 1
+subiu $v1, $v1, 1
+b GPShuffleLoop
+GPEnd:
+move $v0, $t1
+pop ($t0)
+jr $ra
 
 ####################################################
 # StringCmp: compares two 9-character strings.
