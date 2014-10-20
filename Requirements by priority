@@ -18,16 +18,18 @@ Core:
 	
 Fluff:
 	Easy:
-		Other / commands
-			Shuffle
-			Time
-			Help
+		Other / commands	// Noah
+			Shuffle		// Noah
+			Time		// Joe
+			Help		// Joel
 			End game
-		Timer
-		Score counter
-		Splash screen/Main menu
+		Timer			// Joe
+		Score counter		// Joe
+		Splash screen/Main menu	// Joel
 	Hard:
 		List of guessed words
 		List of unguessed words
 		List of invalid words
 		Count of total words in puzzle
+		
+	Hash table work			// James
