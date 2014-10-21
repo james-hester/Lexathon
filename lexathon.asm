@@ -1,4 +1,4 @@
-.eqv WORDS_IN_REGULAR_DICT 75558
+.eqv WORDS_IN_REGULAR_DICT 74563
 .eqv WORDS_IN_NINECHAR_DICT 16692
 .eqv LOADING_BAR_UPDATE_FREQ 1500 #1 period printed per X words processed at the "Loading" screen
 .eqv COMMAND_SIGIL 33 #ASCII 33 is "!"
@@ -45,7 +45,7 @@ pop ($a0)
 
 .data
 
-dictionaryFileName: .asciiz "dictionary.txt"
+dictionaryFileName: .asciiz "hashtable.dat"
 startingWordsDictionaryFileName: .asciiz "ninechar.txt"
 .align 2
 pointerTable: .space 4096
@@ -54,7 +54,10 @@ nineCharArray: .space 8
 userInputBuffer: .space 10
 .align 2
 bitArray: .space 9
-
+.align 2
+addressFirstElement: .space 4
+numWordsInHashtable: .space 4
+pointerTableSize: .space 4
 
 loadMsg: .asciiz "Loading"
 boxTopBar: .asciiz " /-------------\\\n"
@@ -64,16 +67,15 @@ boxSeperator: .asciiz "   "
 boxRightBar: .asciiz "  |\n"
 .align 2
 pointerToTestPuzzle: .space 5
+
 .text
 
 # Set up the hash table and the array of
 # nine-character words.
 ####################################################
-la $a0, dictionaryFileName
-jal LoadStringsFromFile
 
-li $a0, WORDS_IN_REGULAR_DICT
-jal BuildHashTable
+la $a0, dictionaryFileName
+jal LoadHashTable
 
 #Words with nine characters are a special case: they are used to generate a puzzle.
 #Thus, they are kept in their own file, and loaded into a simple array rather than the hashtable.
@@ -101,7 +103,7 @@ sw $t0, ($v1)
 
 newRound:
 jal GenPuzzle
-move $s0, $v0
+move $s1, $v0
 
 gameInputLoop:
 jal PrintPuzzle	#Print the current puzzle...
@@ -128,7 +130,7 @@ b gameInputLoop
 #	3. The input is a valid word
 # Arguments:
 #	$a0: user input
-#	$s0: puzzle
+#	$s1: puzzle
 # Uses registers:
 #	nearly all of them
 # Returns:
@@ -144,7 +146,7 @@ sw $zero, bitArray+4	#...
 sb $zero, bitArray+8	#...done. (4+4+1 = 9 bytes of space)
 li $t4, 1		#$t4 holds the value 1, solely for the purpose of storing it in bitArray[n].
 move $t5, $a0		#preserve $a0 in $t5; $a0 is manipulated in CWCheckLettersLoop
-lw $a1, ($s0)		#$a1: pointer to the puzzle string! (don't forget: $s0 is a pointer to a pointer!)
+lw $a1, ($s1)		#$a1: pointer to the puzzle string! (don't forget: $s1 is a pointer to a pointer!)
 
 #This loop iterates over the characters in the user's input until it reaches
 #a newline or null. (Only strings of nine characters have no newline character.)
@@ -159,7 +161,7 @@ lb $t0, ($a0)
 beqz $t0, CWLoopSuccess #null byte signals the end of a string
 beq $t0, 10, CWLoopSuccess #so does a newline
 li $t1, 9
-lw $a1, ($s0)
+lw $a1, ($s1)
 
 CWFindLetterInPuzzle:
 subi $t1, $t1, 1	#Loop runs from 8 down to 0.
@@ -246,7 +248,6 @@ li $v0, 11
 syscall
 subi $t0, $t0, 1
 b tsgloop
-b quitProgram
 
 testreadloop:	#Temporary loop for testing the hashtable
 li $v0, 8
@@ -261,7 +262,6 @@ li $a0, 10
 li $v0, 11
 syscall
 b testreadloop
-b quitProgram
 
 
 ####################################################
@@ -282,7 +282,7 @@ b quitProgram
 # [BB]
 # Note: this function does not print newlines. They must be included in [TB], [RB], etc.
 # Arguments:
-#	$s0: pointer to the puzzle (a nine-char string)
+#	$s1: pointer to the puzzle (a nine-char string)
 # Uses registers:
 #	$a0-1, $v0, $t0
 # Returns:
@@ -290,7 +290,7 @@ b quitProgram
 ####################################################
 PrintPuzzle:
 push ($ra)
-lw $a1, ($s0)
+lw $a1, ($s1)
 la $a0, boxTopBar
 li $v0, 4
 syscall
@@ -376,39 +376,8 @@ move $v0, $t1
 pop ($t0)
 jr $ra
 
-####################################################
-# StringCmp: compares two 9-character strings.
-# Arguments:
-#	$a0, a1:	pointers to strings (ASCII, exactly 9 characters)
-# Uses registers:
-#	$t0-$t4, $v0
-# Returns:
-#	$v0: 0 if the strings are equal.
-#            1 otherwise.
-####################################################
-StringCmp:
-li $t4, 9
-li $v0, 1
-move $t0, $a0
-move $t1, $a1
-SCLoop:
-lb $t2, ($t0)
-lb $t3, ($t1)
-bne $t2, $t3, SCLoopEnd
-subi $t4, $t4, 1
-beqz $t4, SCLoopEndSuccess
-addi $t0, $t0, 1
-addi $t1, $t1, 1
-b SCLoop
-SCLoopEndSuccess:
-li $v0, 0
-SCLoopEnd:
-jr $ra
-######################
-
 quitProgram: #quit
 li $v0, 10
 syscall
 
-.include "fileio.asm"
-.include "hashtabl.asm"
+.include "hashtable.asm"
