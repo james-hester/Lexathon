@@ -231,7 +231,36 @@ jr $ra
 # use "b handleCommand" instead.
 ####################################################
 handleCommand:
-b quitProgram
+.data			#Bank of Commands
+quit:	.asciiz	"q"
+help:	.asciiz "!quit => exit the program\n!help => display list of commands\n"
+nfound:	.asciiz ""
+out:	.asciiz	"The command was not found.  Type !help for the list of commands\n"
+.text
+lb $t0, 1($a0)
+la $t1, quit
+CheckCommandList:
+lb $t2, ($t1)
+beqz $t1, notfound
+beq $t0, $t2, found
+add $t1, $t1, 4
+add $t4, $t4, 1
+j CheckCommandList
+
+found:
+bgt $t4, 0, gzero
+j quitProgram
+gzero:	
+bgt $t4, 1, gone
+li $v0, 4
+la $a0, help
+gone:
+notfound:
+li $v0, 4
+la $a0, out
+syscall
+j gameInputLoop
+
 
 ######################################################
 
