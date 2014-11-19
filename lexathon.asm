@@ -68,6 +68,18 @@ boxRightBar: .asciiz "  |\n"
 .align 2
 pointerToTestPuzzle: .space 5
 
+#data for command function
+quit:	.asciiz	"qh"
+help:	.asciiz "Commands:\n!q - Quit game\n!t - Display current time\n!e - End game\n!s - Shuffle game board\n!h - Display help\n"
+nfound:	.asciiz ""
+out:	.asciiz	"The command was not found.  Type !help for the list of commands\n"
+
+#data for splash screen
+splashscreenfilename: .asciiz "SplashScreen.txt"  #current size < 250 chars
+
+#data for pressanykeytocontinue
+backspace: .asciiz "\b \n"
+
 .text
 
 # Set up the hash table and the array of
@@ -100,6 +112,8 @@ la $v1, nineCharArray
 sw $t0, ($v1)
 ####################################################
 # The hashtable and array are loaded: the game can start.
+startgame:
+jal PrintSplashScreen
 
 newRound:
 jal GenPuzzle
@@ -230,20 +244,16 @@ jr $ra
 # Note: this is not a function. Don't use "jal handleCommand",
 # use "b handleCommand" instead.
 ####################################################
+
 handleCommand:
-.data			#Bank of Commands
-quit:	.asciiz	"q"
-help:	.asciiz "!quit => exit the program\n!help => display list of commands\n"
-nfound:	.asciiz ""
-out:	.asciiz	"The command was not found.  Type !help for the list of commands\n"
-.text
+li $t4, 0
 lb $t0, 1($a0)
 la $t1, quit
 CheckCommandList:
 lb $t2, ($t1)
-beqz $t1, notfound
+beqz $t2, notfound
 beq $t0, $t2, found
-add $t1, $t1, 4
+add $t1, $t1, 1
 add $t4, $t4, 1
 j CheckCommandList
 
@@ -254,11 +264,14 @@ gzero:
 bgt $t4, 1, gone
 li $v0, 4
 la $a0, help
+syscall
+j HCCommandDone
 gone:
 notfound:
 li $v0, 4
 la $a0, out
 syscall
+HCCommandDone:
 j gameInputLoop
 
 
@@ -404,6 +417,75 @@ GPEnd:
 move $v0, $t1
 pop ($t0)
 jr $ra
+
+
+####################################################
+# PressKeyToContinue: Pauses program until an alphanumaric key is pressed
+# 
+# Arguments:
+#	none
+# Uses registers:
+#	$v0
+# Returns:
+#	Nothing
+####################################################
+PressKeyToContinue:
+li $v0 12
+syscall		# "Pauses" by trying to read a char from the keyboard
+
+li $v0, 4
+la $a0, backspace
+syscall		# Removes typed char  (Doesn't right now, any ideas how to fix this?)
+
+jr $ra
+
+####################################################
+# PrintSplashScreen: Prints out the splah screen and calls PressKeyToContinue
+# 
+# Arguments:
+#	none
+# Uses registers:
+#	$v0, $a0, $a1, $a2, $t0, $t1
+# Returns:
+#	Nothing
+####################################################
+PrintSplashScreen:
+li $v0, 13
+la $a0, splashscreenfilename
+li $a1, 0
+syscall			# Open the SplashScreen file
+move $t0, $v0		# Save file descriptor
+
+li $v0, 9
+li $a0, 250
+syscall			# Allocate space on the heap to print from
+move $t1, $v0		# Save pointer to heap space
+
+li $v0, 14
+move $a0, $t0
+move $a1, $t1
+li $a2, 250
+syscall			# Read up to 250 chars from file into heap
+
+li $v0, 16
+move $a0, $t0
+syscall			# Close SplashScreen file
+
+li $v0, 4
+move $a0, $t1
+syscall			# Print file from heap
+
+addi $sp, $sp, -4
+sw $ra, 0($sp)
+
+jal PressKeyToContinue
+
+lw $ra, 0($sp)
+addi $sp, $sp, 4
+jr $ra
+
+
+
 
 quitProgram: #quit
 li $v0, 10
