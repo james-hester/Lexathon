@@ -80,7 +80,7 @@ timeleft:	.word	120	#start with 2 mins?
 outoftimemsg:	.asciiz "Out of Time Last entry was not counted!\n"
 
 score:		.word	0	#holds the players score
-points1:	.asciiz	"eEiImMoOpPrRsStT"
+points1:	.asciiz	"eEiImMoOpPrRsStT"	#these are used in calculating score
 points2:	.asciiz	"aAbBcCdDfFlLnN"
 points3:	.asciiz	"gGhHjJkKuUvVwWyY"
 points4:	.asciiz	"qQxXzZ"
