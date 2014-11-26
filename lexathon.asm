@@ -69,9 +69,8 @@ boxRightBar: .asciiz "  |\n"
 pointerToTestPuzzle: .space 5
 
 #data for command function
-quit:	.asciiz	"qh"
+quit:	.asciiz	"qhrst"
 help:	.asciiz "Commands:\n!q - Quit game\n!t - Display current time\n!e - End game\n!s - Shuffle game board\n!h - Display help\n"
-nfound:	.asciiz ""
 out:	.asciiz	"The command was not found.  Type !help for the list of commands\n"
 timemessage1:	.asciiz	"You have "
 timemessage2:	.asciiz	" seconds remaining. Current Score: "
@@ -283,17 +282,44 @@ beq $t0, $t2, found
 add $t1, $t1, 1
 add $t4, $t4, 1
 j CheckCommandList
-
 found:
-bgt $t4, 0, gzero
-j quitProgram
-gzero:	
-bgt $t4, 1, gone
-li $v0, 4
+bgt $t4, 0, gzero	
+j quitProgram		#quit
+gzero:
+bgt $t4, 1, gone	
+li $v0, 4		#help
 la $a0, help
 syscall
 j HCCommandDone
 gone:
+bgt $t4, 2, gtwo
+j startgame		#restart
+gtwo:
+bgt $t4, 3, gthree
+lb $t4, 4($s1)		#holds the middle char before shuffle
+lw $v1, ($s1)		#shuffle
+li $t0, 8
+addu $v1, $v1, $t0
+jal GPShuffleLoop
+lb $t5, 4($s1)		#holds the current middle char
+beq $t4, $t5, midCharCorrect	#checks to see if it is holding the correct char
+findPastMidLoop:		#find the location of the middle char
+lb $t0, ($s1)
+beq $t4, $t0, midLocated
+add $s1, $s1, 1
+add $t1, $t1, 1
+j findPastMidLoop
+midLocated:
+sb $t5, ($s1)			#put the wrong mid char in the place where the true mid is
+sub $s1, $s1, $t1		#return to pointing to the beginning
+sb $t4, 4($s1)			#store true mid at the mid
+midCharCorrect:
+j HCComandDone			#print puzzle and continue
+gthree:
+bgt $t4, 4, gfour
+jal printTime
+j HCCommandDone
+gfour:
 notfound:
 li $v0, 4
 la $a0, out
