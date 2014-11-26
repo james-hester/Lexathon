@@ -73,6 +73,18 @@ quit:	.asciiz	"qh"
 help:	.asciiz "Commands:\n!q - Quit game\n!t - Display current time\n!e - End game\n!s - Shuffle game board\n!h - Display help\n"
 nfound:	.asciiz ""
 out:	.asciiz	"The command was not found.  Type !help for the list of commands\n"
+timemessage1:	.asciiz	"You have "
+timemessage2:	.asciiz	" seconds remaining. Current Score: "
+newline:	.asciiz "\n"
+timeleft:	.word	120	#start with 2 mins?
+outoftimemsg:	.asciiz "Out of Time Last entry was not counted!\n"
+
+score:		.word	0	#holds the players score
+points1:	.asciiz	"eEiImMoOpPrRsStT"
+points2:	.asciiz	"aAbBcCdDfFlLnN"
+points3:	.asciiz	"gGhHjJkKuUvVwWyY"
+points4:	.asciiz	"qQxXzZ"
+
 
 #data for splash screen
 splashscreenfilename: .asciiz "SplashScreen.txt"  #current size < 250 chars
@@ -118,6 +130,8 @@ jal PrintSplashScreen
 newRound:
 jal GenPuzzle
 move $s1, $v0
+move $s2, $zero
+jal SetTime
 
 gameInputLoop:
 jal PrintPuzzle	#Print the current puzzle...
@@ -128,12 +142,25 @@ syscall		#Then, poll user for input.
 lb $t0, ($a0)	#Check the first letter of the user's input.
 beq $t0, COMMAND_SIGIL, handleCommand	#If it is the command sigil, process the input as a command.
 jal CheckWord	#Otherwise, it is a word.
+move $t4, $v0	#move returned value from CheckWord into $t4 and $a0
 move $a0, $v0
 li $v0, 1
 syscall
 li $a0, 10
 li $v0, 11
 syscall
+jal CheckTime
+bnez $t4, noPoints
+lw $t0 timeleft		#fetch timeleft from last caculated 
+add $t0,$t0,20		#add 20 seconds to the clock
+sw $t0, timeleft	#save it as the new timeleft
+## to do make a String checker to look through the input and assign a certain score for each letter.
+jal ScoreCheck
+lw $t0,score
+add $t0,$t0,$v1
+sw $t0,score
+noPoints:
+
 b gameInputLoop
 
 
@@ -357,6 +384,7 @@ bnez $t0, PPBoxLoop
 la $a0, boxBottomBar
 li $v0, 4
 syscall
+jal printTime
 pop ($ra)
 jr $ra
 PPNextChar:
@@ -364,6 +392,165 @@ lb $a0, ($a1)
 li $v0, 11
 addiu $a1, $a1, 1
 syscall
+jr $ra
+
+####################################################
+# ScoreCheck: takes the word and caulates a score based on the word
+# this is a function so call using jal
+# Arguments:
+#	userInputBuffer (the string the user has typed in)
+# Uses registers:
+#	$t0-3
+# Returns:
+#	$v1 (amount of points earned for this word)
+####################################################
+ScoreCheck:	#gg ScoreCheck intials are SC just like StringCompare, so it errored at first time cause SCLoop was defined twice
+push($ra)
+move $v1,$zero
+move $t3,$zero
+SCKLoop:
+	lb $t1,userInputBuffer($t3)	#load character at $a2
+	add $t3,$t3,1
+	beq $t1,$zero SCKDone
+	beq $t1,10 SCKDone
+	move $t0,$zero
+	SCKP1L:
+		lb $t2, points1($t0)
+		beq $t2,$zero SCKP1LD
+		beq $t2,10 SCKP1LD
+		add $t0,$t0,1	
+		bne $t1,$t2 SCKP1L
+		add $v1,$v1,1
+		b SCKLoop
+	SCKP1LD:
+	move $t0,$zero
+	SCKP2L:
+		lb $t2, points2($t0)
+		beq $t2,$zero SCKP2LD
+		beq $t2,10 SCKP2LD
+		add $t0,$t0,1	
+		bne $t1,$t2 SCKP2L
+		add $v1,$v1,2
+		b SCKLoop
+	SCKP2LD:
+	move $t0,$zero
+	SCKP3L:
+		lb $t2, points3($t0)
+		beq $t2,$zero SCKP3LD
+		beq $t2,10 SCKP3LD
+		add $t0,$t0,1	
+		bne $t1,$t2 SCKP3L
+		add $v1,$v1,3
+		b SCKLoop	
+	SCKP3LD:
+	move $t0,$zero	
+	SCKP4L:
+		lb $t2, points4($t0)
+		beq $t2,$zero SCKLoop
+		beq $t2,10 SCKLoop
+		add $t0,$t0,1	
+		bne $t1,$t2 SCKP4L
+		add $v1,$v1,4
+		b SCKLoop			
+SCKDone:	
+pop($ra)
+jr $ra
+		
+
+
+
+
+
+####################################################
+# printTime: displays the time remaining and his/her score to the client
+# this is a function so call using jal
+# Arguments:
+#	none
+# Uses registers:
+#	$s2 (holds the time from last calculated), $t0, $a0, $v0
+# Returns:
+#	nothing
+####################################################
+printTime:
+push ($ra)
+push ($a0)	#preserve these registars
+push ($a1)
+
+jal CheckTime	#check and updates time left
+
+blez $v1, GameFinished	#if out of time your done
+
+la $a0, timemessage1	#print Time left sentence
+li $v0, 4
+syscall
+
+la $a0, ($v1)
+li $v0, 1
+syscall
+
+la $a0, timemessage2
+li $v0, 4
+syscall
+
+lw $t0,score
+la $a0, ($t0)
+li $v0, 1
+syscall
+
+la $a0, newline
+li $v0, 4
+syscall
+
+pop ($a1)	#give back
+pop ($a0)
+pop ($ra)
+jr $ra
+
+
+####################################################
+# CheckTime: check if user still has time left
+# Will branch to GameFinished if time left is negative or zero
+# this is a function so call using jal
+# Arguments:
+#	none
+# Uses registers:
+#	$s2 (holds the time from last calculated), $t0, $a0, $v0
+# Returns:
+#	timeleft in $v1
+####################################################
+CheckTime:
+move $t0,$s2		#move time from last check into t0
+li $v0, 30		#get time
+syscall
+move $s2,$a0		#move caculated time into $s2
+sub $a0,$a0,$t0		#subtract current time from previous time to get the difference
+div $a0,$a0,1000	#convert milliseconds to seconds, if faster way feel free to change it
+lw $t0 timeleft		#fetch timeleft from last caculated 
+sub $t0,$t0,$a0		#subtract the difference from the timeleft
+sw $t0, timeleft	#save it as the new timeleft
+move $v1,$t0		#move timeleft into $v1
+jr $ra			
+
+####################################################
+# SetTime: resets timer to 120 seconds and sets $s2 to current time
+# this is a function so call using jal
+# Arguments:
+#	none
+# Uses registers:
+#	$s2, $a0, $v0
+# Returns:
+#	nothing
+####################################################
+SetTime:
+push ($a0)		#preserve these registars, incase used else where
+push ($a1)
+li $v0, 30		#syscall 30 is fetch Time
+syscall
+move $s2,$a0
+add $a0,$zero,120	#put 120 seconds on the clock
+sw $a0 timeleft		#store the time in the timeleft label
+pop ($a1)		#give back values of a0 and a1
+pop ($a0)
 jr $ra
 
 
@@ -485,7 +672,15 @@ addi $sp, $sp, 4
 jr $ra
 
 
+GameFinished:
+## to do make a Game ending screen thingy
+la $a0, outoftimemsg	#prints that your last guess was not counted cause out of time
+li $v0, 4
+syscall
 
+jal PressKeyToContinue	# allow time to view the ending screen
+
+b quitProgram		#possible replace this with a branch to New Round
 
 quitProgram: #quit
 li $v0, 10
