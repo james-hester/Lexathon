@@ -13,35 +13,7 @@ lw %reg, ($sp)
 addi $sp, $sp, 4
 .end_macro
 
-################################################
-# PLEASE DO NOT USE THESE EXCEPT FOR DEBUGGING #
-# THEY WILL BE DELETED EVENTUALLY	       #
-################################################
-.macro print_string (%reg)
-push ($a0)
-push ($v0)
-li $v0, 4
-move $a0, %reg
-syscall
-li $v0, 11
-li $a0, 10
-syscall
-pop ($v0)
-pop ($a0)
-.end_macro
 
-.macro print_int (%reg)
-push ($a0)
-push ($v0)
-li $v0, 1
-move $a0, %reg
-syscall
-li $v0, 11
-li $a0, 10
-syscall
-pop ($v0)
-pop ($a0)
-.end_macro
 
 .data
 
@@ -296,25 +268,30 @@ bgt $t4, 2, gtwo
 j startgame		#restart
 gtwo:
 bgt $t4, 3, gthree
-lb $t4, 4($s1)		#holds the middle char before shuffle
 lw $v1, ($s1)		#shuffle
+lb $t4, 4($v1)		#holds the middle char before shuffle
+push ($t4)
+push ($t0)
 li $t0, 8
 addu $v1, $v1, $t0
+move $t1, $s1
 jal GPShuffleLoop
-lb $t5, 4($s1)		#holds the current middle char
+pop ($t4)
+li $t1, 0
+lb $t5, 4($v1)		#holds the current middle char
 beq $t4, $t5, midCharCorrect	#checks to see if it is holding the correct char
 findPastMidLoop:		#find the location of the middle char
-lb $t0, ($s1)
+lb $t0, ($v1)
 beq $t4, $t0, midLocated
-add $s1, $s1, 1
+add $v1, $v1, 1
 add $t1, $t1, 1
 j findPastMidLoop
 midLocated:
-sb $t5, ($s1)			#put the wrong mid char in the place where the true mid is
-sub $s1, $s1, $t1		#return to pointing to the beginning
-sb $t4, 4($s1)			#store true mid at the mid
+sb $t5, ($v1)			#put the wrong mid char in the place where the true mid is
+sub $v1, $v1, $t1		#return to pointing to the beginning
+sb $t4, 4($v1)			#store true mid at the mid
 midCharCorrect:
-j HCComandDone			#print puzzle and continue
+j HCCommandDone			#print puzzle and continue
 gthree:
 bgt $t4, 4, gfour
 jal printTime
@@ -688,13 +665,11 @@ li $v0, 4
 move $a0, $t1
 syscall			# Print file from heap
 
-addi $sp, $sp, -4
-sw $ra, 0($sp)
+push ($ra)
 
 jal PressKeyToContinue
 
-lw $ra, 0($sp)
-addi $sp, $sp, 4
+pop ($ra)
 jr $ra
 
 
