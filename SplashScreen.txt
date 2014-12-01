@@ -6,3 +6,5 @@
  \                         /
   \     press any key     /
    ----------------------
+
+      Enter !h for help
