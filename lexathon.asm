@@ -58,7 +58,7 @@ points4:	.asciiz	"qQxXzZ"
 
 
 #data for splash screen
-splashscreenfilename: .asciiz "SplashScreen.txt"  #current size < 250 chars
+splashscreenfilename: .asciiz "SplashScreen.txt"  #current size < 300 chars
 
 #data for pressanykeytocontinue
 backspace: .asciiz "\b \n"
@@ -647,14 +647,14 @@ syscall			# Open the SplashScreen file
 move $t0, $v0		# Save file descriptor
 
 li $v0, 9
-li $a0, 250
+li $a0, 300
 syscall			# Allocate space on the heap to print from
 move $t1, $v0		# Save pointer to heap space
 
 li $v0, 14
 move $a0, $t0
 move $a1, $t1
-li $a2, 250
+li $a2, 300
 syscall			# Read up to 250 chars from file into heap
 
 li $v0, 16
