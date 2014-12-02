@@ -1,3 +1,14 @@
+####################################################
+# LoadHashTable: load the hash table into memory.
+# For a discussion of the hash table format, see
+# hashtable_builder.asm.
+# Arguments:
+#	$a0:	pointer to filename (ASCII, 0-terminated)
+# Uses registers:
+#	all of them
+# Returns:
+#	$s0:	the hash table
+#################################################### 
 LoadHashTable:
 li $v0, 13
 li $a1, 0 	#read from file

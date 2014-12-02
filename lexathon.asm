@@ -1,6 +1,31 @@
+##########################################################################
+# ------------------------------------------------------------------------
+#        L       E       X       A       T       H       O       N
+# ------------------------------------------------------------------------
+#     Joseph Baumgratz    James Hester   Joel Seida   Noah Wallaert
+# ------------------------------------------------------------------------
+#  __________________________________
+# |How to Build and Run this Program|
+# ----------------------------------
+# The main Lexathon program is contained in two files: lexathon.asm and 
+# hashtable.asm. Before running Lexathon, ensure these two files along
+# with "hashtable.dat" and the MARS jar itself are all in the same folder.
+# Afterwards, build and run this file (not hashtable.asm); Lexathon will run.
+#  __________________________
+# |Rebuilding the Hash Table|
+# --------------------------
+# Lexathon uses a hash table structure to quickly look up English words.
+# The hash table, located in hashtable.dat, was itself created by a MIPS
+# program, contained in hashtable_builder.asm; the hashtable builder uses
+# strings in the file dictionary.txt. These must all be nine characters,
+# padded with the "`" character. hashtable_builder.asm can be built and run.
+# Before doing so, however, ensure it is in the same folder as all afore-
+# mentioned files, and delete hashtable.dat.
+#
+#############################################################################
+
 .eqv WORDS_IN_REGULAR_DICT 74563
 .eqv WORDS_IN_NINECHAR_DICT 16692
-.eqv LOADING_BAR_UPDATE_FREQ 1500 #1 period printed per X words processed at the "Loading" screen
 .eqv COMMAND_SIGIL 33 #ASCII 33 is "!"
 
 .macro push (%reg)
@@ -13,44 +38,42 @@ lw %reg, ($sp)
 addi $sp, $sp, 4
 .end_macro
 
-
-
 .data
 
 dictionaryFileName: .asciiz "hashtable.dat"
 startingWordsDictionaryFileName: .asciiz "ninechar.txt"
 .align 2
-pointerTable: .space 4096
+pointerTable: 	.space 4096
 .align 2
-nineCharArray: .space 8
-userInputBuffer: .space 10
+nineCharArray:	.space 8
+userInputBuffer:.space 10
 .align 2
-bitArray: .space 9
+bitArray: 	.space 10
 .align 2
-addressFirstElement: .space 4
-numWordsInHashtable: .space 4
-pointerTableSize: .space 4
+addressFirstElement:	.space 4
+numWordsInHashtable:	.space 4
+pointerTableSize: 	.space 4
 
-loadMsg: .asciiz "Loading"
-boxTopBar: .asciiz " /-------------\\\n"
-boxBottomBar: .asciiz " \\-------------/\n\n"
-boxLeftBar: .asciiz " |  "
-boxSeperator: .asciiz "   "
-boxRightBar: .asciiz "  |\n"
+loadMsg: 	.asciiz "Loading"
+boxTopBar: 	.asciiz " /-------------\\\n"
+boxBottomBar: 	.asciiz " \\-------------/\n\n"
+boxLeftBar: 	.asciiz " |  "
+boxSeparator: 	.asciiz "   "
+boxRightBar: 	.asciiz "  |\n"
 .align 2
 pointerToTestPuzzle: .space 5
 
 #data for command function
 quit:	.asciiz	"qhrst"
-help:	.asciiz "Commands:\n!q - Quit game\n!t - Display current time\n!e - End game\n!s - Shuffle game board\n!h - Display help\n"
-out:	.asciiz	"The command was not found.  Type !help for the list of commands\n"
+help:	.asciiz "Commands:\n!q - Quit game\n!t - Display current time\n!r - Restart game\n!s - Shuffle game board\n!h - Display help\n"
+out:	.asciiz	"The command was not found.  Type !h for the list of commands\n"
 timemessage1:	.asciiz	"You have "
 timemessage2:	.asciiz	" seconds remaining. Current Score: "
 newline:	.asciiz "\n"
-timeleft:	.word	120	#start with 2 mins?
-outoftimemsg:	.asciiz "Out of Time Last entry was not counted!\n"
+timeleft:	.word	120	#start with 2 mins
+outoftimemsg:	.asciiz "Out of Time: Last entry was not counted!\n"
 
-score:		.word	0	#holds the players score
+score:		.word	0	#holds the player's score
 points1:	.asciiz	"eEiImMoOpPrRsStT"	#these are used in calculating score
 points2:	.asciiz	"aAbBcCdDfFlLnN"
 points3:	.asciiz	"gGhHjJkKuUvVwWyY"
@@ -62,6 +85,10 @@ splashscreenfilename: .asciiz "SplashScreen.txt"  #current size < 300 chars
 
 #data for pressanykeytocontinue
 backspace: .asciiz "\b \n"
+
+wordInvalidMsg: .asciiz "\nThat's not a valid word!\n\n"
+middleLetterUnusedMsg: .asciiz "\nThe middle letter of the puzzle wasn't used!\n\n"
+
 
 .text
 
@@ -113,16 +140,32 @@ syscall		#Then, poll user for input.
 lb $t0, ($a0)	#Check the first letter of the user's input.
 beq $t0, COMMAND_SIGIL, handleCommand	#If it is the command sigil, process the input as a command.
 jal CheckWord	#Otherwise, it is a word.
-move $t4, $v0	#move returned value from CheckWord into $t4 and $a0
-move $a0, $v0
-li $v0, 1
+move $t4, $v0	#move returned value from CheckWord into $t4
+
+#Based on the results of CheckWord, either complain to or congratulate the user.
+beqz $v0, GILMsg0
+beq $v0, 1, GILMsg1
+beq $v0, 2, GILMsg2
+beq $v0, 3, GILMsg3
+GILMsg0:
+la $a0, newline
+b GILPrintMsg
+GILMsg1:
+la $a0, wordInvalidMsg
+b GILPrintMsg
+GILMsg2:
+la $a0, middleLetterUnusedMsg
+b GILPrintMsg
+GILMsg3:
+la $a0, wordInvalidMsg	#This case, along with the branch statement, are both unnecessary,
+b GILPrintMsg		#but included for clarity.
+GILPrintMsg:
+li $v0, 4
 syscall
-li $a0, 10
-li $v0, 11
-syscall
+
 jal CheckTime
 bnez $t4, noPoints
-lw $t0 timeleft		#fetch timeleft from last caculated 
+lw $t0, timeleft	#fetch timeleft from last calculated 
 add $t0,$t0,20		#add 20 seconds to the clock
 sw $t0, timeleft	#save it as the new timeleft
 ## to do make a String checker to look through the input and assign a certain score for each letter.
@@ -133,7 +176,6 @@ sw $t0,score
 noPoints:
 
 b gameInputLoop
-
 
 ####################################################
 # CheckWord: given user's input, check whether:
@@ -155,10 +197,11 @@ b gameInputLoop
 CheckWord:
 sw $zero, bitArray	#bitArray has to be cleaned up from the last time it was called.
 sw $zero, bitArray+4	#...
-sb $zero, bitArray+8	#...done. (4+4+1 = 9 bytes of space)
+sh $zero, bitArray+8	#...done. (4+4+2 = 10 bytes of space)
 li $t4, 1		#$t4 holds the value 1, solely for the purpose of storing it in bitArray[n].
 move $t5, $a0		#preserve $a0 in $t5; $a0 is manipulated in CWCheckLettersLoop
 lw $a1, ($s1)		#$a1: pointer to the puzzle string! (don't forget: $s1 is a pointer to a pointer!)
+lb $t6, 4($a1)		#$t6 holds the middle character of the puzzle.
 
 #This loop iterates over the characters in the user's input until it reaches
 #a newline or null. (Only strings of nine characters have no newline character.)
@@ -169,35 +212,50 @@ lw $a1, ($s1)		#$a1: pointer to the puzzle string! (don't forget: $s1 is a point
 #because only the middle element is of interest after this loop and this would be bitArray[4] in either case.
 
 CWCheckLettersLoop:
-lb $t0, ($a0)
-beqz $t0, CWLoopSuccess #null byte signals the end of a string
-beq $t0, 10, CWLoopSuccess #so does a newline
-li $t1, 9
-lw $a1, ($s1)
+lb $t0, ($a0)			#$t0: one character from user's input
+beqz $t0, CWLoopSuccess 	#null byte signals the end of a string
+beq $t0, 10, CWLoopSuccess	#so does a newline
+li $t1, 9			#set up interior loop: $t1 is loop counter
+lw $a1, ($s1)			#$a1 now points to the first character of the puzzle string
 
-CWFindLetterInPuzzle:
-subi $t1, $t1, 1	#Loop runs from 8 down to 0.
-bltz $t1, CWFailLetterNotInPuzzle
-lb $t2, ($a1)
-addiu $a1, $a1, 1
-beq $t0, $t2, CWFLIPDone
-b CWFindLetterInPuzzle
+CWFindLetterInPuzzle:		#The interior loop compares $t0 to each character in the puzzle.
+subi $t1, $t1, 1		#It runs from 8 down to 0.
+bltz $t1, CWFailLetterNotInPuzzle #If we've looked at all the letters in the puzzle already, then we haven't found $t0: fail.
+lb $t2, ($a1)			#Get one character of puzzle in $t2;
+addiu $a1, $a1, 1		#look at the next one.
+beq $t0, $t6, CWFLIPMidLetter   #If the user's character is the middle character, handle it at CWFLIPMidLetter.
+CWFLIPCheckDone:
+beq $t0, $t2, CWFLIPDone	#If the two characters are the same, great. We're done with this character.
+b CWFindLetterInPuzzle		#Otherwise, we have more characters to look at.
+CWFLIPMidLetter:		#If the middle character was in the user's input,
+sb $t4, bitArray+9		#toggle the special bit at bitArray[9].
+b CWFLIPCheckDone		#We must branch back and find out where the middle character is in the puzzle,
+				#toggling its bit; if this were not done, the user could use several of the middle
+				#character with no penalty.
 CWFLIPDone:
 
-lb $t3, bitArray($t1)
-bnez $t3, CWFindLetterInPuzzle
-sb $t4, bitArray($t1)
-addiu $a0, $a0, 1
-b CWCheckLettersLoop
+#But what if there are two of the same character in the user's input, or in the puzzle?
+#We have to check whether the character CWFindLetterInPuzzle found has already been found on an
+#earlier pass. To do this, we refer to the value of bitArray at the position the loop counter
+#was at when it "succeeded."
+
+lb $t3, bitArray($t1)		#Put the aforesaid value in $t3.
+bnez $t3, CWFindLetterInPuzzle	#The character has already been found if and only if $t3 is not zero.
+				#In that case, considering $t1, $a1, and $a0 have not changed, all we have
+				#to do to find the next occurrence is branch back to CWFindLetterInPuzzle!
+sb $t4, bitArray($t1)		#Otherwise, put the value 1 into bitArray at $t1.
+addiu $a0, $a0, 1		#One character has successfully been found.
+b CWCheckLettersLoop		#Let's try to find another.
 
 CWLoopSuccess:
 
-lb $t1, bitArray+4
-ble $t1, $zero, CWFailNoMidLetter
+lb $t1, bitArray+9		#As previously mentioned, bitArray[9] is 1 iff the middle letter was somewhere in the input, 0 otherwise.
+ble $t1, $zero, CWFailNoMidLetter #So, fail if bitArray[9] is 0.
 
 #We are finally ready for the last test: putting the word through the hash table.
-#Before we can do this, however, we must pad the word with `s until it is nine
-#characters long, unless, of course, it is already nine characters long.
+#Before we can do this, however, we must pad the word with `s at the end until 
+#it is nine characters long, unless, of course, it is already nine characters long.
+#(For an explanation of why this is, see hashtable.asm.)
 #The good news is that CWCheckLettersLoop has done a lot of heavy lifting for us:
 #	$t0 is a newline (if word is less than 9 chars), zero otherwise;
 #	$a0 points to that newline or null character;
@@ -205,27 +263,36 @@ ble $t1, $zero, CWFailNoMidLetter
 #Therefore, the length of the input is simply $a0 - $t5!
 
 li $t4, '`'
-beqz $t0, CWFormatInputDone
-sub $t0, $a0, $t5
-li $t1, 9
-sub $t0, $t1, $t0 #now $t0 is the number of `s we need
-CWFIInsertPadding:
-sb $t4, ($a0)
-addi $a0, $a0, 1
-subi $t0, $t0, 1
-beqz $t0, CWFormatInputDone
-b CWFIInsertPadding
+beqz $t0, CWFormatInputDone	#User input was nine characters; no padding.
+sub $t0, $a0, $t5		#$t0 = length of string (see above)
+li $t1, 9			#Number of terminal `s: (9 - $t0);
+sub $t0, $t1, $t0		#now $t0 is the number of `s we need.
+CWFIInsertPadding:		#(It will be used as a loop counter in this loop.)
+sb $t4, ($a0)			#Put a ` into $a0, which, at the beginning of the loop, points to the end of a word.
+addi $a0, $a0, 1		#Move to the next letter,
+subi $t0, $t0, 1		#and decrease the loop counter.
+beqz $t0, CWFormatInputDone	#If we're finished, finish.
+b CWFIInsertPadding		#If we're not, insert another `.
 
 CWFormatInputDone:
 
-move $a0, $t5
+#At long last, we can check whether our string is in the hash table, 
+#and thus whether it is an English word.
+
+move $a0, $t5			#$t5 was never changed in the above loops; it remains a pointer to the user input.
 push ($ra)
-jal CheckInHashTable
+jal CheckInHashTable		#Save $ra and check the word!
 pop ($ra)
+
+#Now, $v0 is either 0 (on success) or 1 (on failure.)
+#No further error handling is necessary, so return.
+
 jr $ra
 
+#The following are error conditions branched to by CheckWord, as specified by the header:
+
 CWFailNotWord:
-	#CheckInHashTable returns 1 in $v0 if input is not in the table.
+#Unnecessary; checkInHashTable returns 1 in $v0 if input is not in the table.
 
 CWFailNoMidLetter:
 li $v0, 2
@@ -238,7 +305,11 @@ jr $ra
 ####################################################
 # handleCommand: handles the command in $a0.
 # Supported commands:
-#	none yet
+#	q: quit
+#	h: help
+#	r: restart
+#	s: shuffle
+#	t: display current time
 # Note: this is not a function. Don't use "jal handleCommand",
 # use "b handleCommand" instead.
 ####################################################
@@ -305,53 +376,25 @@ HCCommandDone:
 j gameInputLoop
 
 
-######################################################
-
-teststringgen:	#Temporary loop for testing the puzzle generator.
-li $t0, 5	#Generates this many random scrambled 9-char words, prints them, quits.
-tsgloop:
-beqz $t0, quitProgram
-jal GenPuzzle
-lw $a0, ($v0)
-li $v0, 4
-syscall
-li $a0, 10
-li $v0, 11
-syscall
-subi $t0, $t0, 1
-b tsgloop
-
-testreadloop:	#Temporary loop for testing the hashtable
-li $v0, 8
-li $a1, 10
-la $a0, userInputBuffer
-syscall
-jal CheckInHashTable
-move $a0, $v0
-li $v0, 1
-syscall
-li $a0, 10
-li $v0, 11
-syscall
-b testreadloop
-
-
 ####################################################
 # PrintPuzzle: prints a textual representation of
-# the current puzzle. For example, if the puzzle
-# is "123456789", 
+# the current puzzle, along with the game's status (score and time.)
+# For example, if the puzzle is "123456789", 
 # /-------------\
 # |  1   2   3  |
 # |  4   5   6  |
 # |  7   8   9  |
 # \-------------/
+# (score and time information)
 # will be printed to the console.
-# The appearance of the box can be changed without too much, if any, changes
+# The appearance of the box can be changed without too much, if any, change
 # made to this function, since the parts of the box are stored in strings like
-# boxTopBar, boxSeperator, etc. What this function actually prints to the screen is:
+# boxTopBar, boxSeparator, etc. What this function actually prints to the screen is:
 # [TB]
 # [LB]1[S]2[S]3[RB] (3 times)
 # [BB]
+# After printing this, printTime is called.
+#
 # Note: this function does not print newlines. They must be included in [TB], [RB], etc.
 # Arguments:
 #	$s1: pointer to the puzzle (a nine-char string)
@@ -372,11 +415,11 @@ subiu $t0, $t0, 1
 la $a0, boxLeftBar
 syscall
 jal PPNextChar
-la $a0, boxSeperator
+la $a0, boxSeparator
 li $v0, 4
 syscall
 jal PPNextChar
-la $a0, boxSeperator
+la $a0, boxSeparator
 li $v0, 4
 syscall
 jal PPNextChar
@@ -397,8 +440,9 @@ addiu $a1, $a1, 1
 syscall
 jr $ra
 
+
 ####################################################
-# ScoreCheck: takes the word and caulates a score based on the word
+# ScoreCheck: takes the word and calculates a score based on the word
 # this is a function so call using jal
 # Arguments:
 #	userInputBuffer (the string the user has typed in)
@@ -458,10 +502,6 @@ SCKLoop:
 SCKDone:	
 pop($ra)
 jr $ra
-		
-
-
-
 
 
 ####################################################
@@ -476,12 +516,12 @@ jr $ra
 ####################################################
 printTime:
 push ($ra)
-push ($a0)	#preserve these registars
+push ($a0)	#preserve these registers
 push ($a1)
 
 jal CheckTime	#check and updates time left
 
-blez $v1, GameFinished	#if out of time your done
+blez $v1, GameFinished	#if out of time you're done
 
 la $a0, timemessage1	#print Time left sentence
 li $v0, 4
@@ -610,7 +650,7 @@ jr $ra
 
 
 ####################################################
-# PressKeyToContinue: Pauses program until an alphanumaric key is pressed
+# PressKeyToContinue: Pauses program until an alphanumeric key is pressed
 # 
 # Arguments:
 #	none
@@ -620,7 +660,7 @@ jr $ra
 #	Nothing
 ####################################################
 PressKeyToContinue:
-li $v0 12
+li $v0, 12
 syscall		# "Pauses" by trying to read a char from the keyboard
 
 li $v0, 4
@@ -674,7 +714,6 @@ jr $ra
 
 
 GameFinished:
-## to do make a Game ending screen thingy
 la $a0, outoftimemsg	#prints that your last guess was not counted cause out of time
 li $v0, 4
 syscall
