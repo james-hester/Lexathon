@@ -204,6 +204,22 @@ noPoints:
 
 b gameInputLoop
 
+GameFinished:
+la $a0, outoftimemsg	#prints that your last guess was not counted because out of time
+li $v0, 4
+syscall
+GameEnded:
+jal PrintFinishScreen
+
+jal PressKeyToContinue	# allow time to view the ending screen
+
+j startgame		#possible replace this with a branch to New Round
+
+quitProgram: #quit
+jal ClearFile
+li $v0, 10
+syscall
+
 ####################################################
 # AddWordToFile: adds a word that was found in the dictionary to a list of guessed words
 # this is a function so call using jal
@@ -366,6 +382,10 @@ jr $ra
 #		3: word had characters other than those in the puzzle
 ####################################################
 CheckWord:
+push ($ra)
+jal ConvertToLower
+move $a0, $v0
+pop ($ra)
 sw $zero, bitArray	#bitArray has to be cleaned up from the last time it was called.
 sw $zero, bitArray+4	#...
 sh $zero, bitArray+8	#...done. (4+4+2 = 10 bytes of space)
@@ -976,23 +996,31 @@ la $a0, PressKeyToCon
 syscall			# Print Key Message
 jr $ra
 
-
-GameFinished:
-la $a0, outoftimemsg	#prints that your last guess was not counted because out of time
-li $v0, 4
-syscall
-GameEnded:
-jal PrintFinishScreen
-
-
-
-jal PressKeyToContinue	# allow time to view the ending screen
-
-b quitProgram		#possible replace this with a branch to New Round
-
-quitProgram: #quit
-jal ClearFile
-li $v0, 10
-syscall
+####################################################
+# ConvertToLower: Takes a string and converts all uppercase letters to lowercase
+# 
+# Arguments:
+#	$a0 - pointer to a null-terminated string to convert
+# Uses registers:
+#	$t0-1, $a0, $v0
+# Returns:
+#	$v0 - pointer to converted null-terminated string
+####################################################
+ConvertToLower:
+li $t0, 0   #loop counter
+CTLLoop:
+lb $t1, ($a0)
+ble $t1, 65, CTLSkip
+bge $t1, 90, CTLSkip
+addi $t1, $t1, 32
+sb $t1, ($a0)
+CTLSkip:
+beqz $t1, CTLDone
+addi $t0, $t0, 1
+addi $a0, $a0, 1
+j CTLLoop
+CTLDone:
+sub $v0, $a0, $t0
+jr $ra
 
 .include "hashtable.asm"
