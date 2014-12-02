@@ -958,6 +958,7 @@ jal PressKeyToContinue	# allow time to view the ending screen
 b quitProgram		#possible replace this with a branch to New Round
 
 quitProgram: #quit
+jal ClearFile
 li $v0, 10
 syscall
 
