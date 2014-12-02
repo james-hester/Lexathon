@@ -42,6 +42,7 @@ addi $sp, $sp, 4
 
 dictionaryFileName: .asciiz "hashtable.dat"
 startingWordsDictionaryFileName: .asciiz "ninechar.txt"
+foundwordsFileName: .asciiz "foundwords.txt" 		#used as storage for words found
 .align 2
 pointerTable: 	.space 4096
 .align 2
@@ -64,8 +65,8 @@ boxRightBar: 	.asciiz "  |\n"
 pointerToTestPuzzle: .space 5
 
 #data for command function
-quit:	.asciiz	"qhrst"
-help:	.asciiz "Commands:\n!q - Quit game\n!t - Display current time\n!r - Restart game\n!s - Shuffle game board\n!h - Display help\n"
+quit:	.asciiz	"qhrste"
+help:	.asciiz "Commands:\n!q - Quit game\n!t - Display current time\n!r - Restart game\n!s - Shuffle game board\n!h - Display help\n!e - End Game\n"
 out:	.asciiz	"The command was not found.  Type !h for the list of commands\n"
 timemessage1:	.asciiz	"You have "
 timemessage2:	.asciiz	" seconds remaining. Current Score: "
@@ -78,6 +79,14 @@ points1:	.asciiz	"eEiImMoOpPrRsStT"	#these are used in calculating score
 points2:	.asciiz	"aAbBcCdDfFlLnN"
 points3:	.asciiz	"gGhHjJkKuUvVwWyY"
 points4:	.asciiz	"qQxXzZ"
+
+wordsfound:	.word 0
+emptystring: .asciiz ""
+readbuffer: .space 10
+readbuffert: .space 11
+AlreadyGuessedWord: .asciiz "You have already guessed this word, so no Time/Score has been added!\n\n"
+GameFinishedMessage: .asciiz "####################################################\nGame Finished! Here is a list of words you found:\n"
+PressKeyToCon: .asciiz "Press any key to continue\n"
 
 
 #data for splash screen
@@ -129,7 +138,9 @@ newRound:
 jal GenPuzzle
 move $s1, $v0
 move $s2, $zero
-jal SetTime
+sw $zero, score		#reset the score to 0
+jal ClearFile		#clear FoundWords File
+jal SetTime		#set the clock to 120
 
 gameInputLoop:
 jal PrintPuzzle	#Print the current puzzle...
@@ -165,6 +176,8 @@ syscall
 
 jal CheckTime
 bnez $t4, noPoints
+jal CheckIfAlreadyGuessedWord
+bnez $v1, noPointsWithMessage
 lw $t0, timeleft	#fetch timeleft from last calculated 
 add $t0,$t0,20		#add 20 seconds to the clock
 sw $t0, timeleft	#save it as the new timeleft
@@ -173,9 +186,150 @@ jal ScoreCheck
 lw $t0,score
 add $t0,$t0,$v1
 sw $t0,score
+jal AddWordToFile	#if this word was found then add it to the list
+
+b gameInputLoop
+
+noPointsWithMessage:
+la $a0, AlreadyGuessedWord
+li $v0, 4
+syscall
 noPoints:
 
 b gameInputLoop
+
+####################################################
+# AddWordToFile: adds a word that was found in the dictionary to a list of guessed words
+# this is a function so call using jal
+# Arguments:
+#	userInputBuffer
+# Uses registers:
+#	$t0, $a0, $v0
+# Returns:
+#	nothing
+####################################################
+AddWordToFile:
+la $a0, foundwordsFileName
+li $a1, 9
+li $a2, 0
+li $v0, 13
+syscall
+move $t3, $v0
+move $a0, $v0 
+la $a1, userInputBuffer
+li $a2, 9
+li $v0, 15
+syscall
+move $a0,$t3
+li $v0, 16
+syscall
+lw $t0, wordsfound
+addi $t0,$t0,1
+sw $t0, wordsfound
+jr $ra
+
+ClearFile:
+la $a0, foundwordsFileName
+li $a1, 1
+li $a2, 0
+li $v0, 13
+syscall
+move $t3, $v0
+move $a0, $v0 
+la $a1, emptystring
+li $a2, 0
+li $v0, 15
+syscall
+move $a0,$t3
+li $v0, 16
+syscall
+lw $t0, wordsfound
+move $t0,$zero
+sw $t0, wordsfound
+jr $ra
+
+####################################################
+# CheckIfAlreadyGuessedWord: checks if the word typed in has already been guessed
+# this is a function so call using jal
+# Arguments:
+#	userInputBuffer
+# Uses registers:
+#	$t0, $a0, $v0
+# Returns:
+#	$v1, (contains a 0 if no match found or a 1 if a match was found)
+####################################################
+CheckIfAlreadyGuessedWord:
+la $a0, foundwordsFileName
+li $a1, 0
+li $a2, 0
+li $v0, 13	#open the file for reading only
+syscall
+
+move $t4, $v0
+move $t5, $zero
+
+li $v0, 9
+lw $t0, wordsfound
+mul $t0, $t0, 9
+move $a0, $t0
+syscall			# Allocate space on the heap to read file from
+move $t6, $v0		# Save pointer to heap space
+move $a2, $a0
+
+move $a0, $t4 
+move $a1, $t6
+move $a2, $t0
+li $v0, 14		#read from file, and store on heap
+syscall
+move $t0,$v0
+
+li $v0, 16
+move $a0, $t4
+syscall			#close Foundwords file
+
+ble $t0,8 FWDone	#if chars read is less then 9 then we are at end of file and should report that no match was found
+
+
+FindWordLoop:
+
+move $t0,$zero
+FWBuildRB:
+lb $t1,($t6)	#load character at $t6 the Heap
+beqz $t1 FWDone	#if found a 0 on the heap it means we are at end of file, so no match found
+sb $t1,readbuffer($t0)
+addi $t6,$t6,1
+addi $t0,$t0,1
+beq $t0, 9 FWDB
+j FWBuildRB
+FWDB:
+
+sb $zero, readbuffer+9  #insert a null character at end of readbuffer
+#addi $t5,$t5,9	#be ready for next word
+
+#it will now compare readbuffer with userInputBuffer
+move $t3, $zero
+FWLoop:
+	lb $t1,userInputBuffer($t3)	#load character at $t3 of UIB
+	lb $t2, readbuffer($t3)		#load character at $t3 of RB
+	add $t3,$t3,1			#move pointer to next byte
+	beq $t1, $zero FWFound		#if newline or null then we have found a match
+	beq $t1, 10 FWFound
+	beq $t1, 39 FWSpec		#if char is ' then go to special case
+	bne $t1, $t2 FindWordLoop	#if the bytes are not equal then this is not the right word, so check next one
+	b FWLoop			#check next char
+	
+FWSpec:			#this solves the case where user types "loans" first and then types in "loan" for a later guess 
+beq $t1, $t2 FWFound	#if the bytes are equal than this is a match
+b FindWordLoop		#else move to next word	
+	
+FWFound:
+li $v1,1	#a 1 in v1 means the word was found in the list
+jr $ra
+
+FWDone:
+li $v1,0	#a 0 in v1 means the word was not found in the list
+jr $ra
+
 
 ####################################################
 # CheckWord: given user's input, check whether:
@@ -368,6 +522,10 @@ bgt $t4, 4, gfour
 jal printTime
 j HCCommandDone
 gfour:
+bgt $t4, 5, gfive
+sw $zero, timeleft		#burn out the clock
+j HCCommandDone
+gfive:
 notfound:
 li $v0, 4
 la $a0, out
@@ -712,11 +870,88 @@ jal PressKeyToContinue
 pop ($ra)
 jr $ra
 
+####################################################
+# PrintFinishScreen: Prints out the finish screen and the Words you Found
+# 
+# Arguments:
+#	none
+# Uses registers:
+#	Alot
+# Returns:
+#	Nothing
+####################################################
+PrintFinishScreen:
+li $v0, 4
+la $a0, GameFinishedMessage
+syscall			# Print Finished message
+
+
+la $a0, foundwordsFileName
+li $a1, 0
+li $a2, 0
+li $v0, 13	#open the file for reading only
+syscall
+
+move $t4, $v0
+move $t5, $zero
+
+li $v0, 9
+lw $t0, wordsfound
+mul $t0, $t0, 9
+move $a0, $t0
+syscall			# Allocate space on the heap to read file from
+move $t6, $v0		# Save pointer to heap space
+move $a2, $a0
+
+move $a0, $t4 
+move $a1, $t6
+move $a2, $t0
+li $v0, 14		#read from file, and store on heap
+syscall
+move $t0,$v0
+
+li $v0, 16
+move $a0, $t4
+syscall			#close Foundwords file
+
+ble $t0,8 PFSDone	#if chars read is less then 9 then we are at end of file and should report nothing was found
+
+
+PFSLoop:
+
+move $t0,$zero
+PFSBuildRB:
+lb $t1,($t6)	#load character at $t6 the Heap
+beqz $t1 PFSDone	#if found a 0 on the heap it means we are at end of file, so no match found
+sb $t1,readbuffert($t0)
+addi $t6,$t6,1
+addi $t0,$t0,1
+beq $t0, 9 PFSDB
+j PFSBuildRB
+PFSDB:
+li $t0, 10
+sb $t0, readbuffert+9  #insert a newline character at almost end of readbufferE
+sb $zero, readbuffert+10  #insert a null character at end of readbufferE
+
+li $v0, 4
+la $a0, readbuffert
+syscall			# Print extracted string with padding
+j PFSLoop
+
+PFSDone:
+li $v0, 4
+la $a0, PressKeyToCon
+syscall			# Print Key Message
+jr $ra
+
 
 GameFinished:
 la $a0, outoftimemsg	#prints that your last guess was not counted cause out of time
 li $v0, 4
 syscall
+jal PrintFinishScreen
+
+
 
 jal PressKeyToContinue	# allow time to view the ending screen
 
