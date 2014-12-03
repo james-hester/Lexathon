@@ -65,7 +65,9 @@ boxRightBar: 	.asciiz "  |\n"
 pointerToTestPuzzle: .space 5
 
 #data for command function
-quit:	.asciiz	"qhrste"
+
+commands:	.asciiz	"qhrste"
+
 help:	.asciiz "Commands:\n!q - Quit game\n!t - Display current time\n!r - Restart game\n!s - Shuffle game board\n!h - Display help\n!e - End Game\n"
 out:	.asciiz	"The command was not found.  Type !h for the list of commands\n"
 timemessage1:	.asciiz	"You have "
@@ -84,22 +86,21 @@ wordsfound:	.word 0
 emptystring: .asciiz ""
 readbuffer: .space 10
 readbuffert: .space 11
+
+
 AlreadyGuessedWord: .asciiz "You have already guessed this word, so no Time/Score has been added!\n\n"
-ValidWordFound: .asciiz "You found a vaild word! Time has been added.\n\n"
+ValidWordFound: .asciiz "You found a valid word! Time has been added.\n\n"
 GameFinishedMessage: .asciiz "####################################################\nGame Finished! Here is a list of words you found:\n"
 FinalScoreMessage: .asciiz "Your Final score is: "
 PressKeyToCon: .asciiz "Press any key to continue\n"
-
+wordInvalidMsg: .asciiz "\nThat's not a valid word!\n\n"
+middleLetterUnusedMsg: .asciiz "\nThe middle letter of the puzzle wasn't used!\n\n"
 
 #data for splash screen
 splashscreenfilename: .asciiz "SplashScreen.txt"  #current size < 300 chars
 
 #data for pressanykeytocontinue
 backspace: .asciiz "\b \n"
-
-wordInvalidMsg: .asciiz "\nThat's not a valid word!\n\n"
-middleLetterUnusedMsg: .asciiz "\nThe middle letter of the puzzle wasn't used!\n\n"
-
 
 .text
 
@@ -509,7 +510,7 @@ jr $ra
 handleCommand:
 li $t4, 0
 lb $t0, 1($a0)
-la $t1, quit
+la $t1, commands
 CheckCommandList:
 lb $t2, ($t1)
 beqz $t2, notfound
@@ -763,7 +764,7 @@ li $v0, 30		#get time
 syscall
 move $s2,$a0		#move caculated time into $s2
 sub $a0,$a0,$t0		#subtract current time from previous time to get the difference
-div $a0,$a0,1000	#convert milliseconds to seconds, if faster way feel free to change it
+div $a0,$a0,1000	#convert milliseconds to seconds
 lw $t0 timeleft		#fetch timeleft from last caculated 
 sub $t0,$t0,$a0		#subtract the difference from the timeleft
 sw $t0, timeleft	#save it as the new timeleft
@@ -781,7 +782,7 @@ jr $ra
 #	nothing
 ####################################################
 SetTime:
-push ($a0)		#preserve these registars, incase used else where
+push ($a0)		#preserve these registers, in case used else where
 push ($a1)
 li $v0, 30		#syscall 30 is fetch Time
 syscall
@@ -818,7 +819,7 @@ lw $v1, ($v1)
 addu $a0, $a0, $v1	#a0 points to the random string.
 #Now, we will scramble the string.
 #NOTE: the string is NOT copied before it is scrambled.
-#The original is being scrambled, and this is OK iff (since)
+#The original is being scrambled, and this is OK since
 #nothing special happens when the user finds the puzzle's seed.
 move $t1, $a0
 lw $v1, ($a0)		#$v1 points to the first character of the string
@@ -860,13 +861,14 @@ li $v0, 12
 syscall		# "Pauses" by trying to read a char from the keyboard
 
 li $v0, 4
-la $a0, backspace
-syscall		# Removes typed char  (Doesn't right now, any ideas how to fix this?)
+la $a0, newline
+syscall		# Prints a newline--there doesn't seem to be any way
+		# of removing the user's junk input from the screen.
 
 jr $ra
 
 ####################################################
-# PrintSplashScreen: Prints out the splah screen and calls PressKeyToContinue
+# PrintSplashScreen: Prints out the splash screen and calls PressKeyToContinue
 # 
 # Arguments:
 #	none
