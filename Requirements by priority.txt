@@ -1,0 +1,35 @@
+Core:
+	Dictionary in hash
+	List of 9-letter words
+	Word Checker
+		Word in Dictionary
+		Letters in puzzle w/ center letter
+		Check for length (4-9 letters)
+	Puzzle generator
+		9-letter word picker
+		Scrambler into grid
+		Center letter identified
+	Word Input sends to checker
+		first letter / send to command function
+	Command Function
+		Quit command
+		Valid/invalid
+	Display
+	
+Fluff:
+	Easy:
+		Other / commands	// Noah
+			Shuffle		// Noah
+			Time		// Joe
+			Help		// Joel
+			End game
+		Timer			// Joe
+		Score counter		// Joe
+		Splash screen/Main menu	// Joel
+	Hard:
+		List of guessed words
+		List of unguessed words
+		List of invalid words
+		Count of total words in puzzle
+		
+	Hash table work			// James
